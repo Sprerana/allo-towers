@@ -3,11 +3,6 @@
     "id": "allo-update",
     "execute-command": "/home/sm3906/allo-towers/deploy/deploy.sh",
     "command-working-directory": "/home/sm3906/allo-towers",
-    "response-message": "Allo Towers auto-deployment completed.",
-    "trigger-rule": {
-      "match": {
-        "secret": "mysecret123"
-      }
-    }
+    "response-message": "Allo Towers auto-deployment completed."
   }
 ]
