@@ -1,28 +1,30 @@
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
 import numpy as np
 from typing import List, Dict, Any
+from pathlib import Path
 import math
-import os
 
 app = FastAPI(title="Allo Towers API", description="Signal and FCC Tower Assessment Tool")
 
-# Add CORS middleware
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify your frontend URL
+    allow_origins=["*"],  # tighten in prod
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Data models
+# ---------- Models ----------
+
 class LocationRequest(BaseModel):
     latitude: float
     longitude: float
-    radius: float  # in kilometers
+    radius: float  # km
 
 class TowerAnalysis(BaseModel):
     opencellid_count: int
@@ -33,50 +35,83 @@ class TowerAnalysis(BaseModel):
     opencellid_towers: List[Dict[str, Any]]
     fcc_towers: List[Dict[str, Any]]
 
-# Global variables to store loaded data
-opencellid_data = None
-fcc_data = None
+# ---------- Globals ----------
+opencellid_df: pd.DataFrame | None = None
+fcc_df: pd.DataFrame | None = None
 
-def haversine_distance(lat1, lon1, lat2, lon2):
-    """
-    Calculate the great circle distance between two points 
-    on the earth (specified in decimal degrees)
-    """
-    # Convert decimal degrees to radians
-    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
-    
-    # Haversine formula
+# Columns
+OC_LAT_COL = "lat"
+OC_LON_COL = "lon"
+OC_SAMPLES_COL = "samples"
+FCC_LAT_COL = "Lat"
+FCC_LON_COL = "Lon"
+EARTH_RADIUS_KM = 6371.0
+
+# ---------- Utils ----------
+
+def _vectorized_haversine(lat1_deg: float, lon1_deg: float,
+                          lat2_deg: np.ndarray, lon2_deg: np.ndarray) -> np.ndarray:
+    lat1 = np.radians(lat1_deg)
+    lon1 = np.radians(lon1_deg)
+    lat2 = np.radians(lat2_deg)
+    lon2 = np.radians(lon2_deg)
+
     dlat = lat2 - lat1
     dlon = lon2 - lon1
-    a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
-    c = 2 * math.asin(math.sqrt(a))
-    
-    # Radius of earth in kilometers
-    r = 6371
-    
-    return c * r
+    a = np.sin(dlat / 2.0)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2.0)**2
+    c = 2 * np.arcsin(np.sqrt(a))
+    return EARTH_RADIUS_KM * c
+
+
+def _bounding_box(lat0: float, lon0: float, radius_km: float) -> tuple[float, float, float, float]:
+    lat_delta = radius_km / 111.0
+    lon_scale = max(math.cos(math.radians(lat0)), 1e-6)
+    lon_delta = radius_km / (111.0 * lon_scale)
+    return (lat0 - lat_delta, lat0 + lat_delta, lon0 - lon_delta, lon0 + lon_delta)
+
+
+def _prep_opencellid(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    df[OC_LAT_COL] = pd.to_numeric(df[OC_LAT_COL], errors="coerce")
+    df[OC_LON_COL] = pd.to_numeric(df[OC_LON_COL], errors="coerce")
+    if OC_SAMPLES_COL in df.columns:
+        df[OC_SAMPLES_COL] = pd.to_numeric(df[OC_SAMPLES_COL], errors="coerce").fillna(0).astype(int)
+    else:
+        df[OC_SAMPLES_COL] = 0
+    df = df.dropna(subset=[OC_LAT_COL, OC_LON_COL]).reset_index(drop=True)
+    return df
+
+
+def _prep_fcc(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    df[FCC_LAT_COL] = pd.to_numeric(df[FCC_LAT_COL], errors="coerce")
+    df[FCC_LON_COL] = pd.to_numeric(df[FCC_LON_COL], errors="coerce")
+    df = df.dropna(subset=[FCC_LAT_COL, FCC_LON_COL]).reset_index(drop=True)
+    return df
+
 
 def load_data():
-    """Load the tower datasets"""
-    global opencellid_data, fcc_data
-    
-    try:
-        # Load OpenCellID data
-        opencellid_data = pd.read_csv('../data/Signal Dataset.csv')
-        print(f"Loaded OpenCellID data: {len(opencellid_data)} records")
-        
-        # Load FCC data
-        fcc_data = pd.read_csv('../data/FCC_towers.csv')
-        print(f"Loaded FCC data: {len(fcc_data)} records")
-        
-    except Exception as e:
-        print(f"Error loading data: {e}")
-        raise
+    global opencellid_df, fcc_df
+    here = Path(__file__).resolve().parent
+    data_dir = (here / ".." / "data").resolve()
+
+    oc_path = data_dir / "Signal Dataset.csv"
+    fcc_path = data_dir / "FCC_towers.csv"
+
+    oc = pd.read_csv(oc_path)
+    fcc = pd.read_csv(fcc_path)
+
+    opencellid_df = _prep_opencellid(oc)
+    fcc_df = _prep_fcc(fcc)
+
+    print(f"Loaded OpenCellID data: {len(opencellid_df)} records (cleaned).")
+    print(f"Loaded FCC data: {len(fcc_df)} records (cleaned).")
 
 @app.on_event("startup")
 async def startup_event():
-    """Load data when the application starts"""
     load_data()
+
+# ---------- Endpoints ----------
 
 @app.get("/")
 async def root():
@@ -84,111 +119,106 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "data_loaded": opencellid_data is not None and fcc_data is not None}
+    return {
+        "status": "healthy",
+        "data_loaded": (opencellid_df is not None and fcc_df is not None),
+        "opencellid_records": 0 if opencellid_df is None else len(opencellid_df),
+        "fcc_records": 0 if fcc_df is None else len(fcc_df),
+    }
 
 @app.post("/analyze_towers", response_model=TowerAnalysis)
-async def analyze_towers(request: LocationRequest):
-    """
-    Analyze towers within the specified radius of the given location
-    """
-    if opencellid_data is None or fcc_data is None:
+async def analyze_towers(req: LocationRequest):
+    if opencellid_df is None or fcc_df is None:
         raise HTTPException(status_code=500, detail="Data not loaded")
-    
-    try:
-        # Filter OpenCellID towers within radius
-        opencellid_distances = []
-        opencellid_towers_in_radius = []
-        total_signal_samples = 0
-        opencellid_high_sample_count = 0
-        
-        for _, tower in opencellid_data.iterrows():
-            try:
-                lat = float(tower['lat'])
-                lon = float(tower['lon'])
-                distance = haversine_distance(request.latitude, request.longitude, lat, lon)
-                
-                if distance <= request.radius:
-                    # Get samples count
-                    samples = tower.get('samples',0)
-                    print("sample number is",samples)
-                    try:
-                        samples_int = int(samples) if samples != '' else 0
-                        total_signal_samples += samples_int
-                        if samples_int > 100:
-                            opencellid_high_sample_count += 1
-                    except (ValueError, TypeError):
-                        samples_int = 0
-                    
-                    opencellid_towers_in_radius.append({
-                        'radio': tower.get('radio', ''),
-                        'mcc': tower.get('mcc', ''),
-                        'net': tower.get('net', ''),
-                        'area': tower.get('area', ''),
-                        'cell': tower.get('cell', ''),
-                        'lat': lat,
-                        'lon': lon,
-                        'range': tower.get('range', ''),
-                        'samples': samples_int,
-                        'averageSignal': tower.get('averageSignal', ''),
-                        'distance_km': round(distance, 2)
-                    })
-            except (ValueError, KeyError):
-                continue
-        
-        # Filter FCC towers within radius
-        fcc_towers_in_radius = []
-        
-        for _, tower in fcc_data.iterrows():
-            try:
-                lat = float(tower['Lat'])
-                lon = float(tower['Lon'])
-                distance = haversine_distance(request.latitude, request.longitude, lat, lon)
-                
-                if distance <= request.radius:
-                    fcc_towers_in_radius.append({
-                        'file_number': tower.get('File Number_x', ''),
-                        'registration_number': tower.get('Registration Number', ''),
-                        'structure_type': tower.get('Structure Type', ''),
-                        'height': tower.get('Height of Structure', ''),
-                        'ground_elevation': tower.get('Ground Elevation', ''),
-                        'overall_height': tower.get('Overall Height Above Ground', ''),
-                        'lat': lat,
-                        'lon': lon,
-                        'city': tower.get('Structure_City', ''),
-                        'state': tower.get('Structure_State Code', ''),
-                        'distance_km': round(distance, 2)
-                    })
-            except (ValueError, KeyError):
-                continue
-        
-        return TowerAnalysis(
-            opencellid_count=len(opencellid_towers_in_radius),
-            fcc_count=len(fcc_towers_in_radius),
-            total_towers=len(opencellid_towers_in_radius) + len(fcc_towers_in_radius),
-            total_signal_samples=total_signal_samples,
-            opencellid_high_sample_count=opencellid_high_sample_count,
-            opencellid_towers=opencellid_towers_in_radius,
-            fcc_towers=fcc_towers_in_radius
-        )
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error analyzing towers: {str(e)}")
+
+    lat0, lon0, radius = req.latitude, req.longitude, req.radius
+
+    # OpenCellID
+    lat_min, lat_max, lon_min, lon_max = _bounding_box(lat0, lon0, radius)
+    oc_subset = opencellid_df[
+        opencellid_df[OC_LAT_COL].between(lat_min, lat_max) &
+        opencellid_df[OC_LON_COL].between(lon_min, lon_max)
+    ]
+    if not oc_subset.empty:
+        oc_dist = _vectorized_haversine(lat0, lon0, oc_subset[OC_LAT_COL].values, oc_subset[OC_LON_COL].values)
+        mask = oc_dist <= radius
+        oc_subset = oc_subset.loc[mask].copy()
+        oc_subset["distance_km"] = np.round(oc_dist[mask], 2)
+    else:
+        oc_subset = oc_subset.assign(distance_km=pd.Series(dtype=float))
+
+    total_signal_samples = int(oc_subset[OC_SAMPLES_COL].sum()) if OC_SAMPLES_COL in oc_subset else 0
+    oc_high_count = int((oc_subset[OC_SAMPLES_COL] > 100).sum()) if OC_SAMPLES_COL in oc_subset else 0
+
+    oc_records = []
+    for r in oc_subset.itertuples(index=False):
+        row = r._asdict() if hasattr(r, '_asdict') else dict(r._mapping)
+        oc_records.append({
+            'radio': row.get('radio', ''),
+            'mcc': row.get('mcc', ''),
+            'net': row.get('net', ''),
+            'area': row.get('area', ''),
+            'cell': row.get('cell', ''),
+            'lat': row[OC_LAT_COL],
+            'lon': row[OC_LON_COL],
+            'range': row.get('range', ''),
+            'samples': int(row.get(OC_SAMPLES_COL, 0)),
+            'averageSignal': row.get('averageSignal', ''),
+            'distance_km': row['distance_km'],
+        })
+
+    # FCC
+    lat_min, lat_max, lon_min, lon_max = _bounding_box(lat0, lon0, radius)
+    fcc_subset = fcc_df[
+        fcc_df[FCC_LAT_COL].between(lat_min, lat_max) &
+        fcc_df[FCC_LON_COL].between(lon_min, lon_max)
+    ]
+    if not fcc_subset.empty:
+        fcc_dist = _vectorized_haversine(lat0, lon0, fcc_subset[FCC_LAT_COL].values, fcc_subset[FCC_LON_COL].values)
+        mask = fcc_dist <= radius
+        fcc_subset = fcc_subset.loc[mask].copy()
+        fcc_subset['distance_km'] = np.round(fcc_dist[mask], 2)
+    else:
+        fcc_subset = fcc_subset.assign(distance_km=pd.Series(dtype=float))
+
+    fcc_records = []
+    for r in fcc_subset.itertuples(index=False):
+        row = r._asdict() if hasattr(r, '_asdict') else dict(r._mapping)
+        fcc_records.append({
+            'file_number': row.get('File Number_x', ''),
+            'registration_number': row.get('Registration Number', ''),
+            'structure_type': row.get('Structure Type', ''),
+            'height': row.get('Height of Structure', ''),
+            'ground_elevation': row.get('Ground Elevation', ''),
+            'overall_height': row.get('Overall Height Above Ground', ''),
+            'lat': row[FCC_LAT_COL],
+            'lon': row[FCC_LON_COL],
+            'city': row.get('Structure_City', ''),
+            'state': row.get('Structure_State Code', ''),
+            'distance_km': row['distance_km'],
+        })
+
+    return TowerAnalysis(
+        opencellid_count=len(oc_records),
+        fcc_count=len(fcc_records),
+        total_towers=len(oc_records) + len(fcc_records),
+        total_signal_samples=total_signal_samples,
+        opencellid_high_sample_count=oc_high_count,
+        opencellid_towers=oc_records,
+        fcc_towers=fcc_records,
+    )
 
 @app.get("/data_info")
 async def get_data_info():
-    """Get information about the loaded datasets"""
-    if opencellid_data is None or fcc_data is None:
+    if opencellid_df is None or fcc_df is None:
         raise HTTPException(status_code=500, detail="Data not loaded")
-    
     return {
-        "opencellid_records": len(opencellid_data),
-        "fcc_records": len(fcc_data),
-        "opencellid_columns": list(opencellid_data.columns),
-        "fcc_columns": list(fcc_data.columns),
-        #"opencellid_sample": opencellid_data.head(3).to_dict('records') if len(opencellid_data) > 0 else [],
-        #"fcc_sample": fcc_data.head(3).to_dict('records') if len(fcc_data) > 0 else []
+        "opencellid_records": len(opencellid_df),
+        "fcc_records": len(fcc_df),
+        "opencellid_columns": list(opencellid_df.columns),
+        "fcc_columns": list(fcc_df.columns),
     }
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8080)
