@@ -2,7 +2,11 @@
 
 echo "Starting deployment..."
 
-cd /home/sm3906/allo-towers || exit
+cd /home/sm3906/allo-towers
+
+# Discard all local changes
+git reset --hard HEAD
+git clean -fd
 
 echo "Pulling latest code from GitHub..."
 git pull origin main
