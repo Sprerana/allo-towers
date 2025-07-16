@@ -6,7 +6,6 @@
     "response-message": "Allo Towers auto-deployment completed.",
     "trigger-rule": {
       "match": {
-        "type": "payload-hash-sha256",
         "secret": "mysecret123"
       }
     }
