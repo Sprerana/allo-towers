@@ -8,7 +8,7 @@ echo "Pulling latest code from GitHub..."
 git pull origin main
 
 echo "Activating virtual environment..."
-source /home/sm3906/allo-towers/venv/bin/activate
+source /home/sm3906/venv/bin/activate
 
 echo "Installing dependencies..."
 pip install -r requirements.txt
