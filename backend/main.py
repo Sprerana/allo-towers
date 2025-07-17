@@ -48,7 +48,7 @@ fcc_df: pd.DataFrame | None = None
 OC_LAT_COL = "lat"
 OC_LON_COL = "lon"
 OC_SAMPLES_COL = "samples"
-OC_SIGNAL_COL = "averageSignal" #Added:
+OC_SIGNAL_COL = "averageSignal"
 FCC_LAT_COL = "Lat"
 FCC_LON_COL = "Lon"
 EARTH_RADIUS_KM = 6371.0
@@ -103,6 +103,9 @@ def load_data():
 
     oc_path = data_dir / "Signal Dataset.csv"
     fcc_path = data_dir / "FCC_towers.csv"
+
+    oc.columns = oc.columns.str.strip()
+    fcc.columns = fcc.columns.str.strip()
 
     oc = pd.read_csv(oc_path)
     fcc = pd.read_csv(fcc_path)
