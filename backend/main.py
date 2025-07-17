@@ -36,7 +36,6 @@ class TowerAnalysis(BaseModel):
     min_signal_strength: float
     avg_signal_strength: float
     std_signal_strength: float
-    opencell_count_100: int
     opencellid_towers: List[Dict[str, Any]]
     fcc_towers: List[Dict[str, Any]]
 
@@ -247,4 +246,4 @@ async def get_data_info():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    uvicorn.run(app, host="0.0.0.0", port=8000)

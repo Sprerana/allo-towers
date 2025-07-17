@@ -43,7 +43,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 ##API configuration
-API_BASE_URL = "http://localhost:8080"
+API_BASE_URL = "http://localhost:8000"
 
 def check_api_health():
     """Check if the API is running"""
@@ -158,7 +158,7 @@ def create_tower_map(towers_data: Dict[str, Any], center_lat: float, center_lon:
 
 def main():
     # Header
-    st.markdown('<h1 class="main-header">�� Allo Towers</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">Allo Towers</h1>', unsafe_allow_html=True)
     st.markdown('<h2 style="text-align: center; color: #666;">Signal and FCC Tower Assessment Tool</h2>', unsafe_allow_html=True)
     
     # Check API health
@@ -170,9 +170,9 @@ def main():
     # Get data info
     data_info = get_data_info()
     if data_info:
-        st.sidebar.success("✅ Backend API is running")
-        st.sidebar.info(f"OpenCellID Records: {data_info['opencellid_records']:,}")
-        st.sidebar.info(f"🏗️ FCC Records: {data_info['fcc_records']:,}")
+        #st.sidebar.success("✅ Backend API is running")
+        st.sidebar.info(f"Total OpenCellID Records: {data_info['opencellid_records']:,}")
+        st.sidebar.info(f"🏗️ Total FCC Records: {data_info['fcc_records']:,}")
     else:
         st.sidebar.warning("⚠️ Could not retrieve data information")
     
@@ -274,36 +274,7 @@ def main():
                 
                 # Signal Analysis Visualizations
                 if results['opencellid_towers']:
-                    st.markdown("### 📈 Signal Analysis Visualizations")
-                    
                     opencellid_df = pd.DataFrame(results['opencellid_towers'])
-                    
-                    # Sample distribution chart
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        st.markdown("#### 📊 Sample Distribution")
-                        fig_samples = px.histogram(
-                            opencellid_df, 
-                            x='samples', 
-                            nbins=20,
-                            title="Distribution of Signal Samples",
-                            labels={'samples': 'Number of Samples', 'count': 'Number of Towers'}
-                        )
-                        fig_samples.update_layout(showlegend=False)
-                        st.plotly_chart(fig_samples, use_container_width=True)
-                    
-                    with col2:
-                        st.markdown("#### �� Sample vs Distance")
-                        fig_scatter = px.scatter(
-                            opencellid_df,
-                            x='distance_km',
-                            y='samples',
-                            title="Signal Samples vs Distance from Center",
-                            labels={'distance_km': 'Distance (km)', 'samples': 'Number of Samples'},
-                            hover_data=['radio', 'mcc', 'net']
-                        )
-                        st.plotly_chart(fig_scatter, use_container_width=True)
                     
                     # Radio type analysis
                     if 'radio' in opencellid_df.columns:
