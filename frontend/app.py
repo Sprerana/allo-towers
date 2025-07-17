@@ -10,7 +10,7 @@ import json
 
 # Page configuration
 st.set_page_config(
-    page_title="Allo Towers - Signal and FCC Tower Assessment Tool",
+    page_title="!!Allo Towers - Signal and FCC Tower Assessment Tool",
     page_icon="📡",
     layout="wide",
     initial_sidebar_state="expanded"
