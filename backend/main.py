@@ -93,7 +93,7 @@ def _prep_fcc(df: pd.DataFrame) -> pd.DataFrame:
 def load_data():
     global opencellid_df, fcc_df
     here = Path(__file__).resolve().parent
-    data_dir = (here / ".." / "data").resolve()
+    data_dir = (here / ".." / ".." / "data").resolve()
 
     oc_path = data_dir / "Signal Dataset.csv"
     fcc_path = data_dir / "FCC_towers.csv"
