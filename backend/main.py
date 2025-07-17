@@ -111,6 +111,10 @@ def load_data():
     fcc = pd.read_csv(fcc_path)
 
     opencellid_df = _prep_opencellid(oc)
+    # after opencellid_df = _prep_opencellid(oc)
+    print(">>> OpenCellID dtypes:", opencellid_df.dtypes.to_dict())
+    print(">>> Sample rows for [samples, averageSignal]:")
+    print(opencellid_df[["samples", "averageSignal"]].head(10))
     fcc_df = _prep_fcc(fcc)
 
     print(f"Loaded OpenCellID data: {len(opencellid_df)} records (cleaned).")
