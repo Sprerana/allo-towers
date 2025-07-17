@@ -253,7 +253,7 @@ def main():
                 
                 with col4:
                     high_sample_percentage = (results['opencellid_high_sample_count'] / results['opencellid_count'] * 100) if results['opencellid_count'] > 0 else 0
-                    #st.metric("High Sample %", f"{high_sample_percentage:.1f}%")
+                    st.metric("High Sample %", f"{high_sample_percentage:.1f}%")
                 
                 # Create and display map
                 st.markdown("### 🗺️ Tower Locations")
