@@ -104,11 +104,11 @@ def load_data():
     oc_path = data_dir / "Signal Dataset.csv"
     fcc_path = data_dir / "FCC_towers.csv"
 
-    oc.columns = oc.columns.str.strip()
-    fcc.columns = fcc.columns.str.strip()
-
     oc = pd.read_csv(oc_path)
     fcc = pd.read_csv(fcc_path)
+
+    oc.columns = oc.columns.str.strip()
+    fcc.columns = fcc.columns.str.strip()
 
     opencellid_df = _prep_opencellid(oc)
     # after opencellid_df = _prep_opencellid(oc)
