@@ -10,7 +10,7 @@ import json
 
 # Page configuration
 st.set_page_config(
-    page_title="!!Allo Towers - Signal and FCC Tower Assessment Tool",
+    page_title="Allo Towers - Signal and FCC Tower Assessment Tool",
     page_icon="📡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -170,7 +170,7 @@ def main():
     # Get data info
     data_info = get_data_info()
     if data_info:
-        #st.sidebar.success("✅ Backend API is running")
+        st.sidebar.success("✅ Backend API is running")
         st.sidebar.info(f"Total OpenCellID Records: {data_info['opencellid_records']:,}")
         st.sidebar.info(f"🏗️ Total FCC Records: {data_info['fcc_records']:,}")
     else:
