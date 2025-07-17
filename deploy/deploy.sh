@@ -4,7 +4,6 @@ echo "Starting deployment..."
 
 cd /home/sm3906/allo-towers
 
-
 git reset --hard HEAD
 git clean -fd
 
