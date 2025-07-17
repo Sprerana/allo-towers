@@ -2,6 +2,7 @@
 import streamlit as st
 import requests
 import pandas as pd
+import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from typing import Dict, Any
@@ -10,7 +11,6 @@ import json
 # Page configuration
 st.set_page_config(
     page_title="Allo Towers - Signal and FCC Tower Assessment Tool",
-    page_icon="��",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -170,7 +170,7 @@ def main():
     data_info = get_data_info()
     if data_info:
         st.sidebar.success("✅ Backend API is running")
-        st.sidebar.info(f"�� OpenCellID Records: {data_info['opencellid_records']:,}")
+        st.sidebar.info(f"OpenCellID Records: {data_info['opencellid_records']:,}")
         st.sidebar.info(f"🏗️ FCC Records: {data_info['fcc_records']:,}")
     else:
         st.sidebar.warning("⚠️ Could not retrieve data information")
@@ -254,6 +254,18 @@ def main():
                 with col4:
                     high_sample_percentage = (results['opencellid_high_sample_count'] / results['opencellid_count'] * 100) if results['opencellid_count'] > 0 else 0
                     st.metric("High Sample %", f"{high_sample_percentage:.1f}%")
+                
+                # Added: Signal strength metrics
+                st.markdown("### 🚦 Signal Strength Metrics")
+                col5, col6, col7, col8 = st.columns(4)
+                with col5:
+                    st.metric("Max Signal Strength", f"{results.get('max_signal_strength', 0.0):.2f}")
+                with col6:
+                    st.metric("Min Signal Strength", f"{results.get('min_signal_strength', 0.0):.2f}")
+                with col7:
+                    st.metric("Avg Signal Strength", f"{results.get('avg_signal_strength', 0.0):.2f}")
+                with col8:
+                    st.metric("Std Dev Signal Strength", f"{results.get('std_signal_strength', 0.0):.2f}")
                 
                 # Create and display map
                 st.markdown("### 🗺️ Tower Locations")
