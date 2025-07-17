@@ -220,7 +220,7 @@ def main():
             results = analyze_towers(latitude, longitude, radius)
             
             if results:
-                st.success("✅ Analysis completed!")
+                #st.success("✅ Analysis completed!")
                 
                 # Display metrics
                 col1, col2, col3, col4 = st.columns(4)
