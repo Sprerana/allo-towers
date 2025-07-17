@@ -1,236 +1,358 @@
-### main.py
-
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-import pandas as pd
-import numpy as np
-from typing import List, Dict, Any
-from pathlib import Path
-import math
-
-app = FastAPI(title="Allo Towers API", description="Signal and FCC Tower Assessment Tool")
-
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # tighten in prod
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# ---------- Models ----------
-class LocationRequest(BaseModel):
-    latitude: float
-    longitude: float
-    radius: float  # km
-
-class TowerAnalysis(BaseModel):
-    opencellid_count: int
-    fcc_count: int
-    total_towers: int
-    total_signal_samples: int
-    opencellid_high_sample_count: int
-    # Added: signal strength metrics
-    max_signal_strength: float
-    min_signal_strength: float
-    avg_signal_strength: float
-    std_signal_strength: float
-    opencellid_towers: List[Dict[str, Any]]
-    fcc_towers: List[Dict[str, Any]]
-
-# ---------- Globals ----------
-opencellid_df: pd.DataFrame | None = None
-fcc_df: pd.DataFrame | None = None
-
-# Columns
-OC_LAT_COL = "lat"
-OC_LON_COL = "lon"
-OC_SAMPLES_COL = "samples"
-# The Signal Dataset.csv has an averageSignal column
-OC_SIGNAL_COL = "averageSignal"  # Added: reference to averageSignal
-FCC_LAT_COL = "Lat"
-FCC_LON_COL = "Lon"
-EARTH_RADIUS_KM = 6371.0
-
-# ---------- Utils ----------
-# ... (unchanged utility functions) ...
-
-def load_data():
-    global opencellid_df, fcc_df
-    here = Path(__file__).resolve().parent
-    data_dir = (here / ".." / ".." / "data").resolve()
-
-    oc_path = data_dir / "Signal Dataset.csv"
-    fcc_path = data_dir / "FCC_towers.csv"
-
-    oc = pd.read_csv(oc_path)
-    fcc = pd.read_csv(fcc_path)
-
-    opencellid_df = _prep_opencellid(oc)
-    fcc_df = _prep_fcc(fcc)
-
-    print(f"Loaded OpenCellID data: {len(opencellid_df)} records (cleaned).")
-    print(f"Loaded FCC data: {len(fcc_df)} records (cleaned).")
-
-@app.on_event("startup")
-async def startup_event():
-    load_data()
-
-# ---------- Endpoints ----------
-
-@app.post("/analyze_towers", response_model=TowerAnalysis)
-async def analyze_towers(req: LocationRequest):
-    if opencellid_df is None or fcc_df is None:
-        raise HTTPException(status_code=500, detail="Data not loaded")
-
-    lat0, lon0, radius = req.latitude, req.longitude, req.radius
-
-    # OpenCellID filtering (unchanged)
-    lat_min, lat_max, lon_min, lon_max = _bounding_box(lat0, lon0, radius)
-    oc_subset = opencellid_df[
-        opencellid_df[OC_LAT_COL].between(lat_min, lat_max) &
-        opencellid_df[OC_LON_COL].between(lon_min, lon_max)
-    ]
-    if not oc_subset.empty:
-        oc_dist = _vectorized_haversine(lat0, lon0, oc_subset[OC_LAT_COL].values, oc_subset[OC_LON_COL].values)
-        mask = oc_dist <= radius
-        oc_subset = oc_subset.loc[mask].copy()
-        oc_subset["distance_km"] = np.round(oc_dist[mask], 2)
-    else:
-        oc_subset = oc_subset.assign(distance_km=pd.Series(dtype=float))
-
-    # Compute signal sample metrics (unchanged)
-    total_signal_samples = int(oc_subset[OC_SAMPLES_COL].sum()) if OC_SAMPLES_COL in oc_subset else 0
-    oc_high_count = int((oc_subset[OC_SAMPLES_COL] > 100).sum()) if OC_SAMPLES_COL in oc_subset else 0
-
-    # Added: compute signal strength metrics
-    if OC_SIGNAL_COL in oc_subset.columns:
-        oc_subset[OC_SIGNAL_COL] = pd.to_numeric(oc_subset[OC_SIGNAL_COL], errors='coerce')
-        sig_vals = oc_subset[OC_SIGNAL_COL].dropna()
-        if not sig_vals.empty:
-            max_signal = float(sig_vals.max())
-            min_signal = float(sig_vals.min())
-            avg_signal = float(sig_vals.mean())
-            std_signal = float(sig_vals.std())
-        else:
-            max_signal = min_signal = avg_signal = std_signal = 0.0
-    else:
-        max_signal = min_signal = avg_signal = std_signal = 0.0
-
-    # Prepare record lists (unchanged)...
-    oc_records = []
-    for r in oc_subset.itertuples(index=False):
-        row = r._asdict() if hasattr(r, '_asdict') else dict(r._mapping)
-        oc_records.append({
-            'radio': row.get('radio', ''),
-            'mcc': row.get('mcc', ''),
-            'net': row.get('net', ''),
-            'area': row.get('area', ''),
-            'cell': row.get('cell', ''),
-            'lat': row[OC_LAT_COL],
-            'lon': row[OC_LON_COL],
-            'range': row.get('range', ''),
-            'samples': int(row.get(OC_SAMPLES_COL, 0)),
-            'averageSignal': row.get(OC_SIGNAL_COL, ''),  # Ensures signal is returned
-            'distance_km': row['distance_km'],
-        })
-
-    # FCC processing (unchanged)...
-    # ...
-
-    # Return including new metrics
-    return TowerAnalysis(
-        opencellid_count=len(oc_records),
-        fcc_count=len(fcc_records),
-        total_towers=len(oc_records) + len(fcc_records),
-        total_signal_samples=total_signal_samples,
-        opencellid_high_sample_count=oc_high_count,
-        max_signal_strength=max_signal,  # Added
-        min_signal_strength=min_signal,  # Added
-        avg_signal_strength=avg_signal,  # Added
-        std_signal_strength=std_signal,  # Added
-        opencellid_towers=oc_records,
-        fcc_towers=fcc_records,
-    )
-
-# Other endpoints unchanged...
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-
-
-### app.py
+# frontend/app.py
 
 import streamlit as st
 import requests
 import pandas as pd
-import numpy as np  # Added for any numeric operations
 import plotly.express as px
 import plotly.graph_objects as go
 from typing import Dict, Any
 import json
 
-# Page configuration (unchanged)
-# ...
+# Page configuration
+st.set_page_config(
+    page_title="Allo Towers - Signal and FCC Tower Assessment Tool",
+    page_icon="📡",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Custom CSS for better styling
+st.markdown("""
+<style>
+    .main-header {
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #1f77b4;
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    .metric-card {
+        background-color: #f0f2f6;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        border-left: 4px solid #1f77b4;
+    }
+    .tower-card {
+        background-color: #ffffff;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        border: 1px solid #e0e0e0;
+        margin-bottom: 1rem;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # API configuration
 API_BASE_URL = "http://localhost:8000"
 
-# Helper functions (unchanged)
-# ...
+def check_api_health():
+    """Check if the API is running"""
+    try:
+        response = requests.get(f"{API_BASE_URL}/health", timeout=5)
+        return response.status_code == 200
+    except:
+        return False
+
+def get_data_info():
+    """Get information about the loaded datasets"""
+    try:
+        response = requests.get(f"{API_BASE_URL}/data_info", timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        return None
+    except:
+        return None
+
+def analyze_towers(latitude: float, longitude: float, radius: float):
+    """Send analysis request to the API"""
+    try:
+        payload = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "radius": radius
+        }
+        response = requests.post(f"{API_BASE_URL}/analyze_towers", json=payload, timeout=30)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            st.error(f"API Error: {response.text}")
+            return None
+    except Exception as e:
+        st.error(f"Error connecting to API: {str(e)}")
+        return None
+
+def create_tower_map(towers_data: Dict[str, Any], center_lat: float, center_lon: float):
+    """Create a map visualization of the towers"""
+    if not towers_data:
+        return None
+    
+    # Prepare data for plotting
+    opencellid_towers = towers_data.get('opencellid_towers', [])
+    fcc_towers = towers_data.get('fcc_towers', [])
+    
+    # Create figure
+    fig = go.Figure()
+    
+    # Add OpenCellID towers
+    if opencellid_towers:
+        opencellid_df = pd.DataFrame(opencellid_towers)
+        fig.add_trace(go.Scattermapbox(
+            lat=opencellid_df['lat'],
+            lon=opencellid_df['lon'],
+            mode='markers',
+            marker=go.scattermapbox.Marker(
+                size=8,
+                color='blue',
+                opacity=0.7
+            ),
+            text=opencellid_df.apply(lambda row: f"OpenCellID<br>Distance: {row['distance_km']} km<br>Radio: {row['radio']}", axis=1),
+            hoverinfo='text',
+            name='OpenCellID Towers'
+        ))
+    
+    # Add FCC towers
+    if fcc_towers:
+        fcc_df = pd.DataFrame(fcc_towers)
+        fig.add_trace(go.Scattermapbox(
+            lat=fcc_df['lat'],
+            lon=fcc_df['lon'],
+            mode='markers',
+            marker=go.scattermapbox.Marker(
+                size=8,
+                color='red',
+                opacity=0.7
+            ),
+            text=fcc_df.apply(lambda row: f"FCC Tower<br>Distance: {row['distance_km']} km<br>Type: {row['structure_type']}", axis=1),
+            hoverinfo='text',
+            name='FCC Towers'
+        ))
+    
+    # Add center point
+    fig.add_trace(go.Scattermapbox(
+        lat=[center_lat],
+        lon=[center_lon],
+        mode='markers',
+        marker=go.scattermapbox.Marker(
+            size=15,
+            color='green',
+            symbol='star'
+        ),
+        text=['Search Center'],
+        hoverinfo='text',
+        name='Search Center'
+    ))
+    
+    # Update layout
+    fig.update_layout(
+        mapbox=dict(
+            style="open-street-map",
+            center=dict(lat=center_lat, lon=center_lon),
+            zoom=10
+        ),
+        height=500,
+        margin=dict(l=0, r=0, t=0, b=0),
+        showlegend=True
+    )
+    
+    return fig
 
 def main():
-    # Header and health check (unchanged)
-    # ...
+    # Header
+    st.markdown('<h1 class="main-header">📡 Allo Towers</h1>', unsafe_allow_html=True)
+    st.markdown('<h2 style="text-align: center; color: #666;">Signal and FCC Tower Assessment Tool</h2>', unsafe_allow_html=True)
+    
+    # Check API health
+    if not check_api_health():
+        st.error("⚠️ Backend API is not running. Please start the FastAPI server first.")
+        st.info("To start the backend, run: cd backend && python main.py")
+        return
+    
+    # Get data info
+    data_info = get_data_info()
+    if data_info:
+        st.sidebar.success("✅ Backend API is running")
+        st.sidebar.info(f"📊 OpenCellID Records: {data_info['opencellid_records']:,}")
+        st.sidebar.info(f"🏗️ FCC Records: {data_info['fcc_records']:,}")
+    else:
+        st.sidebar.warning("⚠️ Could not retrieve data information")
+    
+    # Input form
+    st.markdown("### 📍 Location and Search Parameters")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        latitude = st.number_input(
+            "Latitude",
+            min_value=-90.0,
+            max_value=90.0,
+            value=40.7128,
+            step=0.0001,
+            format="%.4f",
+            help="Enter latitude in decimal degrees (e.g., 40.7128 for New York)"
+        )
+    
+    with col2:
+        longitude = st.number_input(
+            "Longitude",
+            min_value=-180.0,
+            max_value=180.0,
+            value=-74.0060,
+            step=0.0001,
+            format="%.4f",
+            help="Enter longitude in decimal degrees (e.g., -74.0060 for New York)"
+        )
+    
+    with col3:
+        radius = st.number_input(
+            "Search Radius (km)",
+            min_value=0.1,
+            max_value=100.0,
+            value=10.0,
+            step=0.1,
+            format="%.1f",
+            help="Enter search radius in kilometers"
+        )
+    
+    # Analysis button
     if st.button("🔍 Analyze Towers", type="primary", use_container_width=True):
         with st.spinner("Analyzing towers in the specified area..."):
             results = analyze_towers(latitude, longitude, radius)
+            
             if results:
                 st.success("✅ Analysis completed!")
-
-                # Display existing metrics (unchanged)
+                
+                # Display metrics
                 col1, col2, col3, col4 = st.columns(4)
+                
                 with col1:
                     st.metric("Total Towers", results['total_towers'])
+                
                 with col2:
                     st.metric("OpenCellID Towers", results['opencellid_count'])
+                
                 with col3:
                     st.metric("FCC Towers", results['fcc_count'])
+                
                 with col4:
                     density = results['total_towers'] / (3.14159 * radius * radius) if radius > 0 else 0
                     st.metric("Tower Density", f"{density:.2f} towers/km²")
-
-                # Signal sample metrics (unchanged)
+                
+                # Additional metrics
                 st.markdown("### 📊 Signal Analysis Metrics")
                 col1, col2, col3, col4 = st.columns(4)
+                
                 with col1:
                     st.metric("Total Signal Samples", f"{results['total_signal_samples']:,}")
+                
                 with col2:
                     st.metric("High Sample Towers (>100)", results['opencellid_high_sample_count'])
+                
                 with col3:
                     avg_samples = results['total_signal_samples'] / results['opencellid_count'] if results['opencellid_count'] > 0 else 0
                     st.metric("Avg Samples per Tower", f"{avg_samples:.1f}")
+                
                 with col4:
                     high_sample_percentage = (results['opencellid_high_sample_count'] / results['opencellid_count'] * 100) if results['opencellid_count'] > 0 else 0
                     st.metric("High Sample %", f"{high_sample_percentage:.1f}%")
-
-                # Added: Signal strength metrics
-                st.markdown("### 🚦 Signal Strength Metrics")
-                col5, col6, col7, col8 = st.columns(4)
-                with col5:
-                    st.metric("Max Signal Strength", f"{results.get('max_signal_strength', 0.0):.2f}")
-                with col6:
-                    st.metric("Min Signal Strength", f"{results.get('min_signal_strength', 0.0):.2f}")
-                with col7:
-                    st.metric("Avg Signal Strength", f"{results.get('avg_signal_strength', 0.0):.2f}")
-                with col8:
-                    st.metric("Std Dev Signal Strength", f"{results.get('std_signal_strength', 0.0):.2f}")
-
-                # Continue with map and other visualizations (unchanged)
-                # ...
+                
+                # Create and display map
+                st.markdown("### 🗺️ Tower Locations")
+                map_fig = create_tower_map(results, latitude, longitude)
+                if map_fig:
+                    st.plotly_chart(map_fig, use_container_width=True)
+                
+                # Signal Analysis Visualizations
+                if results['opencellid_towers']:
+                    st.markdown("### 📈 Signal Analysis Visualizations")
+                    
+                    opencellid_df = pd.DataFrame(results['opencellid_towers'])
+                    
+                    # Sample distribution chart
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("#### 📊 Sample Distribution")
+                        fig_samples = px.histogram(
+                            opencellid_df, 
+                            x='samples', 
+                            nbins=20,
+                            title="Distribution of Signal Samples",
+                            labels={'samples': 'Number of Samples', 'count': 'Number of Towers'}
+                        )
+                        fig_samples.update_layout(showlegend=False)
+                        st.plotly_chart(fig_samples, use_container_width=True)
+                    
+                    with col2:
+                        st.markdown("#### 📉 Sample vs Distance")
+                        fig_scatter = px.scatter(
+                            opencellid_df,
+                            x='distance_km',
+                            y='samples',
+                            title="Signal Samples vs Distance from Center",
+                            labels={'distance_km': 'Distance (km)', 'samples': 'Number of Samples'},
+                            hover_data=['radio', 'mcc', 'net']
+                        )
+                        st.plotly_chart(fig_scatter, use_container_width=True)
+                    
+                    # Radio type analysis table
+                    if 'radio' in opencellid_df.columns:
+                        st.markdown("#### 📱 Radio Type Analysis")
+                        radio_stats = opencellid_df.groupby('radio').agg({
+                            'samples': ['count', 'sum', 'mean'],
+                            'distance_km': 'mean'
+                        }).round(2)
+                        radio_stats.columns = ['Tower Count', 'Total Samples', 'Avg Samples', 'Avg Distance (km)']
+                        st.dataframe(radio_stats, use_container_width=True)
+                        
+                        # added: Network Type Distribution Chart
+                        st.markdown("#### 📶 Network Type Distribution")  # added
+                        network_df = opencellid_df['radio'].value_counts().reset_index()  # added
+                        network_df.columns = ['Network Type', 'Count']  # added
+                        fig_network = px.bar(  # added
+                            network_df,
+                            x='Network Type',
+                            y='Count',
+                            title='Network Type Distribution Within Radius',  # added
+                            labels={'Network Type': 'Network Type', 'Count': 'Number of Towers'}  # added
+                        )  # added
+                        st.plotly_chart(fig_network, use_container_width=True)  # added
+                    
+                    # Display detailed results
+                    if results['opencellid_towers'] or results['fcc_towers']:
+                        st.markdown("### 📋 Detailed Results")
+                        
+                        # OpenCellID Towers
+                        if results['opencellid_towers']:
+                            st.markdown("#### 📱 OpenCellID Towers")
+                            opencellid_df = pd.DataFrame(results['opencellid_towers'])
+                            st.dataframe(
+                                opencellid_df[['radio', 'mcc', 'net', 'lat', 'lon', 'range', 'samples', 'distance_km']],
+                                use_container_width=True
+                            )
+                        
+                        # FCC Towers
+                        if results['fcc_towers']:
+                            st.markdown("#### 🏗️ FCC Towers")
+                            fcc_df = pd.DataFrame(results['fcc_towers'])
+                            st.dataframe(
+                                fcc_df[['structure_type', 'height', 'lat', 'lon', 'city', 'state', 'distance_km']],
+                                use_container_width=True
+                            )
+                    else:
+                        st.info("No towers found within the specified radius.")
+    
+    # Footer
+    st.markdown("---")
+    st.markdown(
+        """
+        <div style="text-align: center; color: #666; font-size: 0.8rem;">
+            Allo Towers - Signal and FCC Tower Assessment Tool<br>
+            Built with Streamlit and FastAPI
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 if __name__ == "__main__":
     main()

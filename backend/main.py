@@ -36,6 +36,7 @@ class TowerAnalysis(BaseModel):
     min_signal_strength: float
     avg_signal_strength: float
     std_signal_strength: float
+    opencell_count_100: int
     opencellid_towers: List[Dict[str, Any]]
     fcc_towers: List[Dict[str, Any]]
 
@@ -145,6 +146,8 @@ async def analyze_towers(req: LocationRequest):
         opencellid_df[OC_LAT_COL].between(lat_min, lat_max) &
         opencellid_df[OC_LON_COL].between(lon_min, lon_max)
     ]
+
+    #filtering the os_subset to include only the bounding parameters
     if not oc_subset.empty:
         oc_dist = _vectorized_haversine(lat0, lon0, oc_subset[OC_LAT_COL].values, oc_subset[OC_LON_COL].values)
         mask = oc_dist <= radius
@@ -244,4 +247,4 @@ async def get_data_info():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    uvicorn.run(app, host="0.0.0.0", port=8000)

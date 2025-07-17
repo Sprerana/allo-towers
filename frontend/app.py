@@ -11,6 +11,7 @@ import json
 # Page configuration
 st.set_page_config(
     page_title="Allo Towers - Signal and FCC Tower Assessment Tool",
+    page_icon="📡",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -42,7 +43,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 ## API configuration
-API_BASE_URL = "http://localhost:8080"
+API_BASE_URL = "http://localhost:8000"
 
 def check_api_health():
     """Check if the API is running"""
@@ -237,9 +238,10 @@ def main():
                     density = results['total_towers'] / (3.14159 * radius * radius) if radius > 0 else 0
                     st.metric("Tower Density", f"{density:.2f} towers/km²")
                 
+                
                 # Additional metrics
                 st.markdown("### 📊 Signal Analysis Metrics")
-                col1, col2, col3, col4 = st.columns(4)
+                col1, col2, col3 = st.columns(3)
                 
                 with col1:
                     st.metric("Total Signal Samples", f"{results['total_signal_samples']:,}")
@@ -251,10 +253,7 @@ def main():
                     avg_samples = results['total_signal_samples'] / results['opencellid_count'] if results['opencellid_count'] > 0 else 0
                     st.metric("Avg Samples per Tower", f"{avg_samples:.1f}")
                 
-                with col4:
-                    high_sample_percentage = (results['opencellid_high_sample_count'] / results['opencellid_count'] * 100) if results['opencellid_count'] > 0 else 0
-                    st.metric("High Sample %", f"{high_sample_percentage:.1f}%")
-                
+
                 # Added: Signal strength metrics
                 st.markdown("### 🚦 Signal Strength Metrics")
                 col5, col6, col7, col8 = st.columns(4)
@@ -315,6 +314,18 @@ def main():
                         }).round(2)
                         radio_stats.columns = ['Tower Count', 'Total Samples', 'Avg Samples', 'Avg Distance (km)']
                         st.dataframe(radio_stats, use_container_width=True)
+                    
+                    st.markdown("#### 📶 Network Type Distribution")  # added
+                    network_df = opencellid_df['radio'].value_counts().reset_index()  # added
+                    network_df.columns = ['Network Type', 'Count']  # added
+                    fig_network = px.bar(  # added
+                            network_df,
+                            x='Network Type',
+                            y='Count',
+                            title='Network Type Distribution Within Radius',  # added
+                            labels={'Network Type': 'Network Type', 'Count': 'Number of Towers'}  # added
+                        )  # added
+                    st.plotly_chart(fig_network, use_container_width=True) 
                 
                 # Display detailed results
                 if results['opencellid_towers'] or results['fcc_towers']:
