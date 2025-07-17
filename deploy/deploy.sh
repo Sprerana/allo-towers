@@ -4,7 +4,7 @@ echo "Starting deployment..."
 
 cd /home/sm3906/allo-towers
 
-# Discard all local changes
+
 git reset --hard HEAD
 git clean -fd
 
