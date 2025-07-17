@@ -249,7 +249,7 @@ def main():
                 
                 with col3:
                     avg_samples = results['total_signal_samples'] / results['opencellid_count'] if results['opencellid_count'] > 0 else 0
-                    #st.metric("Avg Samples per Tower", f"{avg_samples:.1f}")
+                    st.metric("Avg Samples per Tower", f"{avg_samples:.1f}")
                 
                 with col4:
                     high_sample_percentage = (results['opencellid_high_sample_count'] / results['opencellid_count'] * 100) if results['opencellid_count'] > 0 else 0
