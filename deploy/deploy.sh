@@ -4,6 +4,7 @@ echo "Starting deployment..."
 
 cd /home/sm3906/allo-towers
 
+echo "Remove local changed of VM"
 git reset --hard HEAD
 git clean -fd
 
