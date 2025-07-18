@@ -291,9 +291,7 @@ def main():
                 if results["fcc_towers"]:
                     st.markdown("#### 🏗️ FCC Towers")
                     st.dataframe(
-                        pd.DataFrame(results["fcc_towers"])[
-                            ["structure_type", "height", "lat", "lon", "city", "state", "distance_miles"]
-                        ],
+                        pd.DataFrame(results["fcc_towers"]),
                         use_container_width=True
                     )
                 if not results["opencellid_towers"] and not results["fcc_towers"]:

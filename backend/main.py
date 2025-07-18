@@ -214,6 +214,7 @@ async def analyze_towers(req: LocationRequest):
         fcc_records.append({
             "file_number": row.get("File Number_x", ""),
             "registration_number": row.get("Registration Number", ""),
+            #"structure_type": row.get("Structure Type", ""),
             "height": row.get("Height of Structure", ""),
             "ground_elevation": row.get("Ground Elevation", ""),
             "overall_height": row.get("Overall Height Above Ground", ""),
