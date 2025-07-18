@@ -208,6 +208,11 @@ async def analyze_towers(req: LocationRequest):
     else:
         fcc_subset = fcc_subset.assign(distance_miles=pd.Series(dtype=float))
 
+    fcc_subset.drop(
+    columns=["Structure Type"],
+    inplace=True
+    )
+
     fcc_records = []
     for r in fcc_subset.itertuples(index=False):
         row = r._asdict() if hasattr(r, "_asdict") else dict(r._mapping)
@@ -238,7 +243,6 @@ async def analyze_towers(req: LocationRequest):
         opencellid_towers=oc_records,
         fcc_towers=fcc_records,
     )
-
 @app.get("/data_info")
 async def get_data_info():
     if opencellid_df is None or fcc_df is None:
