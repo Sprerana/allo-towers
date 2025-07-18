@@ -224,7 +224,7 @@ async def analyze_towers(req: LocationRequest):
             "state": row.get("Structure_State Code", ""),
             "distance_miles": row["distance_miles"],
         })
-
+    #returning values computed
     return TowerAnalysis(
         opencellid_count=len(oc_records),
         fcc_count=len(fcc_records),
