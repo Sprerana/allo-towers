@@ -41,7 +41,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-API_BASE_URL = "http://localhost:8000"
+API_BASE_URL = "http://localhost:8080"
 
 def check_api_health() -> bool:
     try:
@@ -219,7 +219,7 @@ def main():
                     use_container_width=True
                 )
 
-                # Further per-radio analyses
+                #Further per-radio analyses
                 if results["opencellid_towers"]:
                     df_oc = pd.DataFrame(results["opencellid_towers"])
 
