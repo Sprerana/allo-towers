@@ -211,18 +211,22 @@ async def analyze_towers(req: LocationRequest):
 
     print(fcc_subset.columns)
 
-    fcc_subset = fcc_subset.drop(
-    columns=["Array Tower Position", "Array Total Tower", "File Number", "Suffix", "File Number_y","Unique System Identifier_y", "Previous Purpose", "Version", "Marking and Lighting Other", "FRN 2", "PO Box 2", "Suffix 2", "Entity Type 2","Entity Type 1", "Assignor Signature Last Name", "Assignor Signature First Name", "Assignor Signature Middle Initial", "Assignor Signature Suffix", "Assignor Signature Title", "Assignor Signature Date Signed"  ],
-    errors="ignore"
-    )   
-
-    fcc_subset = fcc_subset.rename(
-        columns={FCC_LAT_COL: "lat", FCC_LON_COL: "lon", "Structure Type":"structure_type","Registration Number":"registration_number","Unnamed: 0": "S.No"}
-    )
-
     fcc_records = []
-    fcc_records = fcc_subset.to_dict(orient="records")
-
+    for r in fcc_subset.itertuples(index=False):
+        row = r._asdict() if hasattr(r, "_asdict") else dict(r._mapping)
+        fcc_records.append({
+            "file_number": row.get("File Number_x", ""),
+            "registration_number": row.get("Registration Number", ""),
+            "structure_type": row.get("Structure Type", ""),
+            "height": row.get("Height of Structure", ""),
+            "ground_elevation": row.get("Ground Elevation", ""),
+            "overall_height": row.get("Overall Height Above Ground", ""),
+            "lat": row[FCC_LAT_COL],
+            "lon": row[FCC_LON_COL],
+            "city": row.get("Structure_City", ""),
+            "state": row.get("Structure_State Code", ""),
+            "distance_miles": row["distance_miles"],
+        })
     #returning values computed
     return TowerAnalysis(
         opencellid_count=len(oc_records),
@@ -250,4 +254,4 @@ async def get_data_info():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    uvicorn.run(app, host="0.0.0.0", port=8000)

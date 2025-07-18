@@ -284,7 +284,7 @@ def main():
                     st.markdown("#### 📱 OpenCellID Towers")
                     st.dataframe(
                         pd.DataFrame(results["opencellid_towers"])[
-                            ["radio", "mcc", "net", "lat", "lon", "range", "samples", "distance_miles"]
+                            ["radio", "mcc", "net", "lat", "lon", "range", "samples","averageSignal", "distance_miles"]
                         ],
                         use_container_width=True
                     )
