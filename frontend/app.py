@@ -157,7 +157,7 @@ def create_tower_map(towers_data: Dict[str, Any], center_lat: float, center_lon:
     return fig
 
 def main():
-    # Header
+    # # Header
     st.markdown('<h1 class="main-header">Allo Towers</h1>', unsafe_allow_html=True)
     st.markdown('<h2 style="text-align: center; color: #666;">Signal and FCC Tower Assessment Tool</h2>', unsafe_allow_html=True)
     
