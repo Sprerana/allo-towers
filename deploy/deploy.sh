@@ -21,10 +21,8 @@ sudo systemctl stop allo-frontend
 
 sudo systemctl start allo-frontend
 
-echo "Restarting FastAPI backend service..."
-sudo systemctl restart allo-backend.service
+sudo systemctl stop allo-frontend
 
-echo "Restarting Streamlit frontend service..."
-sudo systemctl restart allo-frontend.service
+sudo systemctl start allo-backend
 
 echo "Deployment complete."
