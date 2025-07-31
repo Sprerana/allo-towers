@@ -17,12 +17,12 @@ source /home/sm3906/venv/bin/activate
 echo "Installing dependencies..."
 pip install -r requirements.txt
 
-sudo systemctl stop allo-frontend
+#sudo systemctl stop allo-frontend
 
-sudo systemctl start allo-frontend
+sudo systemctl restart allo-frontend
 
-sudo systemctl stop allo-frontend
+#sudo systemctl stop allo-frontend
 
-sudo systemctl start allo-backend
+sudo systemctl restart allo-backend
 
 echo "Deployment complete."
