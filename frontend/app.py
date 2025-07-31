@@ -145,7 +145,7 @@ def main():
     # Sidebar info
     info = get_data_info()
     if info:
-        st.sidebar.success("✅ Backend API is running")
+        #st.sidebar.success("✅ Backend API is running")
         st.sidebar.info(f"Total OpenCellID Records: {info['opencellid_records']:,}")
         st.sidebar.info(f"Total FCC Records: {info['fcc_records']:,}")
     else:
